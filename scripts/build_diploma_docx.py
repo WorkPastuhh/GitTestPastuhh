@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
 from xml.sax.saxutils import escape
-from zipfile import ZIP_DEFLATED, ZipFile
+from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "docs" / "diploma_work_template_kesi.md"
 OUTPUT = ROOT / "docs" / "diploma_work_template_kesi.docx"
+DOCX_W3CDTF_TIMESTAMP = "2026-01-01T00:00:00Z"
+ZIP_MEMBER_TIMESTAMP = (2026, 1, 1, 0, 0, 0)
 
 
 def read_paragraphs(path: Path) -> list[str]:
@@ -77,7 +78,6 @@ def build_document_xml(paragraphs: list[str]) -> str:
 
 
 def build_core_xml() -> str:
-    created = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
  xmlns:dc="http://purl.org/dc/elements/1.1/"
@@ -87,10 +87,17 @@ def build_core_xml() -> str:
   <dc:title>Рабочий шаблон дипломной работы</dc:title>
   <dc:creator>Cursor Cloud</dc:creator>
   <cp:lastModifiedBy>Cursor Cloud</cp:lastModifiedBy>
-  <dcterms:created xsi:type="dcterms:W3CDTF">{created}</dcterms:created>
-  <dcterms:modified xsi:type="dcterms:W3CDTF">{created}</dcterms:modified>
+  <dcterms:created xsi:type="dcterms:W3CDTF">{DOCX_W3CDTF_TIMESTAMP}</dcterms:created>
+  <dcterms:modified xsi:type="dcterms:W3CDTF">{DOCX_W3CDTF_TIMESTAMP}</dcterms:modified>
 </cp:coreProperties>
 """
+
+
+def write_archive_entry(archive: ZipFile, name: str, content: str) -> None:
+    info = ZipInfo(name)
+    info.date_time = ZIP_MEMBER_TIMESTAMP
+    info.compress_type = ZIP_DEFLATED
+    archive.writestr(info, content)
 
 
 def write_docx(paragraphs: list[str], destination: Path) -> None:
@@ -122,12 +129,12 @@ def write_docx(paragraphs: list[str], destination: Path) -> None:
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     with ZipFile(destination, "w", compression=ZIP_DEFLATED) as archive:
-        archive.writestr("[Content_Types].xml", content_types)
-        archive.writestr("_rels/.rels", rels)
-        archive.writestr("docProps/app.xml", app)
-        archive.writestr("docProps/core.xml", build_core_xml())
-        archive.writestr("word/document.xml", build_document_xml(paragraphs))
-        archive.writestr("word/_rels/document.xml.rels", word_rels)
+        write_archive_entry(archive, "[Content_Types].xml", content_types)
+        write_archive_entry(archive, "_rels/.rels", rels)
+        write_archive_entry(archive, "docProps/app.xml", app)
+        write_archive_entry(archive, "docProps/core.xml", build_core_xml())
+        write_archive_entry(archive, "word/document.xml", build_document_xml(paragraphs))
+        write_archive_entry(archive, "word/_rels/document.xml.rels", word_rels)
 
 
 def main() -> None:
